@@ -7,50 +7,89 @@ using System.Reflection.Metadata.Ecma335;
 
 namespace CustomerSimulator.Controllers
 {
+    [Route("api/[controller]")]
+    [ApiController]
     public class CustomersController : ControllerBase
     {
-
+        private readonly ICustomerService _customerService;
+        //TODO:Add Logging
+        public CustomersController(ICustomerService customerService)
+        {
+            _customerService = customerService;
+        }
+        #region EndPoint to Get Customer Data
         // GET: CustomersController/
         [HttpGet]
-        //[Route("api/customers")]
+        [Route("api/customers")]
         public ActionResult GetCustomers()
         {
-            return Ok();
-        }
+            try
+            {
+                var customersList = _customerService.GetCustomers();
 
+                return Ok(customersList);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+        #endregion
+        #region EndPoint to Post Customer Data Request
         // POST: CustomersController/CreateCustomers
         [HttpPost]
         [Route("api/customers")]
-        public ActionResult CreateCustomers([FromBody] List<CustomerDto> customerRequestList)
+        public ActionResult CreateCustomers([FromBody] List<CustomerDto> customersDtoData)
         {
-            if (customerRequestList == null)
-                return BadRequest("request data not provided");
+            //Check for bad request sent :
+            if (customersDtoData == null)
+            {
+                return BadRequest();
+            }
 
-            var errors = processCustomerRequestData(customerRequestList);
+            try
+            {
+                var customers = processCustomerRequestData(customersDtoData);
 
-            if (errors.Any())
-                return BadRequest(errors.ToString());
+                foreach (var customer in customers)
+                {
+                    //Check if Id already exists
+                    if (!_customerService.CheckCustomerId(customer))
+                        _customerService.AddCustomer(customer);
+                }
 
-            return Ok();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+
+            return Created("", null);
         }
-
-        private List<string> processCustomerRequestData(List<CustomerDto> customerDataSet)
+        #endregion
+        #region Process Request Data and return bad requests responses
+        private List<Customer> processCustomerRequestData(List<CustomerDto> customersDtoData)
         {
-            List<Customer> customerList = new List<Customer>();
-            List<string> Errors = new List<string>();
-            foreach (var customer in customerDataSet)
+            var customers = new List<Customer>();
+            var NumberOfCustomers = customersDtoData.Count;
+
+            for (int index = 0; index < NumberOfCustomers; index++)
             {
                 try
                 {
-                    customerList.Add(new Customer(customer.Id, customer.FirstName, customer.LastName, customer.Age));
+                    var customerDto = customersDtoData[index];
+                    customers.Add(customerDto.ToDomain());
+
+                    return customers;
                 }
                 catch (Exception ex)
                 {
-                    Errors.Add(ex.Message);
-                    continue;
+                    throw new Exception($"Invalid data found in request data at index {index + 1} , Details : {ex.Message}");
                 }
             }
-            return Errors;
+
+            return customers;
         }
+        #endregion
     }
 }
